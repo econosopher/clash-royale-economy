@@ -1,0 +1,4 @@
+Level,Cards Required,Gold Cost,Cumulative Cards,Cumulative Gold
+11 \-\> 12,2,"35,000",2,"35,000"
+12 \-\> 13,8,"75,000",10,"110,000"
+13 \-\> 14,20,"100,000",30,"210,000"

@@ -1,0 +1,18 @@
+{
+  "version_id": "446563fc2603",
+  "seed": 1,
+  "season": {
+    "matches": 450,
+    "wins": 251,
+    "losses": 199,
+    "winrate": 0.5577777777777778,
+    "crowns": 702,
+    "boxes": 120,
+    "gold_from_matches": 2510,
+    "gold_from_pass": 1750,
+    "gold_total": 4260,
+    "final_trophies": 504,
+    "account_level": 3,
+    "power_total": 100.0
+  }
+}
