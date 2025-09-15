@@ -10,7 +10,7 @@ simulate_match <- function(state, cfg, power_bonus = 0) {
   win_prob <- mm_adjust_winrate(cfg, intrinsic, state$trophies)
   win <- runif(1) < win_prob
   crowns <- sample_from_pmf(if (win) cfg$crown_dist$on_win else cfg$crown_dist$on_loss)
-  state$trophies <- state$trophies + if (win) cfg$trophies_on_win else cfg$trophies_on_loss
+  state$trophies <- max(0L, state$trophies + if (win) cfg$trophies_on_win else cfg$trophies_on_loss)
   if (win) {
     if (!is.na(cfg$gold_drop$fixed_amount)) {
       gold <- cfg$gold_drop$fixed_amount
@@ -20,7 +20,7 @@ simulate_match <- function(state, cfg, power_bonus = 0) {
   } else {
     gold <- 0L
   }
-  list(win = win, crowns = crowns, gold = gold)
+  list(win = win, crowns = crowns, gold = gold, state = state)
 }
 
 apply_card_drop <- function(state, drop) {
@@ -100,7 +100,7 @@ greedy_apply_upgrades <- function(state, cfg) {
     state$power_score <- (state$power_score %||% 0.0) + best$value
     steps <- dplyr::bind_rows(steps, tibble::tibble(rarity = as.character(best$rarity), gold_spent = as.numeric(best$gold_cost), power_gained = as.numeric(best$value)))
   }
-  list(gold_spent = gold_spent, upgrades = upgrades, power_gained = power_gained, steps = steps)
+  list(state = state, gold_spent = gold_spent, upgrades = upgrades, power_gained = power_gained, steps = steps)
 }
 
 simulate_day <- function(state, cfg, day_index) {
@@ -128,6 +128,7 @@ simulate_day <- function(state, cfg, day_index) {
   for (m in seq_len(matches)) {
     power_bonus <- power_bonus_from_score(cfg, state$power_score %||% 0.0)
     res <- simulate_match(state, cfg, power_bonus)
+    state <- res$state
     win <- res$win
     crowns <- as.integer(res$crowns)
     gold <- as.integer(res$gold)
@@ -137,29 +138,38 @@ simulate_day <- function(state, cfg, day_index) {
 
     if (win) {
       next_win_index <- wins + 1L
+      reward_label <- NULL
+      final_star <- NULL
       if (!is.null(lucky) && boxes_earned_today < daily_box_cap &&
           next_win_index <= cfg$lucky_drop$wins_with_lucky_drops) {
-        # roll star
         start <- if (next_win_index == 1L) 2L else 1L
         final_star <- lucky_star_roll_star(start, cfg$lucky_drop$spins, lucky$star)
-        label <- lucky_star_roll_final(final_star, lucky$final)
+        reward_label <- lucky_star_roll_final(final_star, lucky$final)
+      }
+      if (boxes_earned_today < daily_box_cap) {
         boxes_earned_today <- boxes_earned_today + 1L
-        if (label == "Random Cards") {
-          # mimic a simple rarity draw
+        reward <- reward_label %||% "Random Cards"
+        if (identical(reward, "Gold")) {
+          gextra <- cfg$lucky_drop$gold_reward_by_star[as.character(final_star)] %||% 0L
+          if (gextra > 0) {
+            state$gold_bank <- state$gold_bank + gextra
+            state$gold_today <- state$gold_today + gextra
+            gold_from_matches <- gold_from_matches + gextra
+          }
+        } else {
           pr <- rarity_weights_for_trophies(state$trophies)
           rarity <- sample(names(pr), 1, prob = pr)
           card <- paste0("Card_", rarity, "_", sample(1:10,1))
           qty <- if (rarity=="common") sample(5:10,1) else if (rarity=="rare") sample(2:4,1) else 1L
           state <- apply_card_drop(state, list(rarity=rarity, card=card, quantity=qty))
           box_rarity_counts[rarity] <- box_rarity_counts[rarity] + 1L
-        } else if (label == "Gold") {
-          gextra <- cfg$lucky_drop$gold_reward_by_star[as.character(final_star)] %||% 0L
-          state$gold_bank <- state$gold_bank + gextra
-          state$gold_today <- state$gold_today + gextra
-          gold_from_matches <- gold_from_matches + gextra
-        } else {
-          # cosmetic: no-op
         }
+      } else if (!is.null(reward_label) && identical(reward_label, "Random Cards")) {
+        pr <- rarity_weights_for_trophies(state$trophies)
+        rarity <- sample(names(pr), 1, prob = pr)
+        card <- paste0("Card_", rarity, "_", sample(1:10,1))
+        qty <- if (rarity=="common") sample(5:10,1) else if (rarity=="rare") sample(2:4,1) else 1L
+        state <- apply_card_drop(state, list(rarity=rarity, card=card, quantity=qty))
       }
     }
 
@@ -184,6 +194,7 @@ simulate_day <- function(state, cfg, day_index) {
 
     # Try upgrades after rewards this match
     up <- greedy_apply_upgrades(state, cfg)
+    state <- up$state
     if (up$gold_spent > 0) gold_spent_today <- gold_spent_today + up$gold_spent
     if (up$upgrades > 0) upgrades_today <- upgrades_today + up$upgrades
     if (up$power_gained > 0) power_gained_today <- power_gained_today + up$power_gained
@@ -203,13 +214,18 @@ simulate_day <- function(state, cfg, day_index) {
   levels_tbl <- NULL
   if (length(state$cards) > 0) {
     levels_tbl <- purrr::map_dfr(state$cards, ~as.data.frame(.x)) %>%
-      group_by(rarity) %>% summarise(avg_level = mean(level), .groups = 'drop')
+      dplyr::group_by(rarity) %>% dplyr::summarise(avg_level = mean(level), .groups = 'drop')
   }
-  avg_level <- if (!is.null(levels_tbl)) mean(levels_tbl$avg_level) else NA_real_
-  avg_level_common <- levels_tbl$avg_level[levels_tbl$rarity == 'common'] %||% NA_real_
-  avg_level_rare <- levels_tbl$avg_level[levels_tbl$rarity == 'rare'] %||% NA_real_
-  avg_level_epic <- levels_tbl$avg_level[levels_tbl$rarity == 'epic'] %||% NA_real_
-  avg_level_legendary <- levels_tbl$avg_level[levels_tbl$rarity == 'legendary'] %||% NA_real_
+  scalar_avg <- function(tbl, rar) {
+    if (is.null(tbl) || nrow(tbl) == 0) return(NA_real_)
+    val <- tbl$avg_level[tolower(tbl$rarity) == tolower(rar)]
+    if (length(val) == 0) NA_real_ else as.numeric(val[[1]])
+  }
+  avg_level <- if (!is.null(levels_tbl) && nrow(levels_tbl) > 0) mean(levels_tbl$avg_level) else NA_real_
+  avg_level_common <- scalar_avg(levels_tbl, 'common')
+  avg_level_rare <- scalar_avg(levels_tbl, 'rare')
+  avg_level_epic <- scalar_avg(levels_tbl, 'epic')
+  avg_level_legendary <- scalar_avg(levels_tbl, 'legendary')
 
   arena <- current_arena(cfg$arenas, state$trophies)
   pbonus <- power_bonus_from_score(cfg, state$power_score %||% 0.0)
@@ -234,6 +250,18 @@ simulate_day <- function(state, cfg, day_index) {
     power_total = state$power_score %||% 0.0,
     power_bonus = pbonus,
     arena_end = arena$name[1],
+    boxes_common = box_rarity_counts[['common']] %||% 0L,
+    boxes_rare = box_rarity_counts[['rare']] %||% 0L,
+    boxes_epic = box_rarity_counts[['epic']] %||% 0L,
+    boxes_legendary = box_rarity_counts[['legendary']] %||% 0L,
+    gold_spent_common = gold_by_rarity[['common']] %||% 0,
+    gold_spent_rare = gold_by_rarity[['rare']] %||% 0,
+    gold_spent_epic = gold_by_rarity[['epic']] %||% 0,
+    gold_spent_legendary = gold_by_rarity[['legendary']] %||% 0,
+    power_gained_common = power_by_rarity[['common']] %||% 0,
+    power_gained_rare = power_by_rarity[['rare']] %||% 0,
+    power_gained_epic = power_by_rarity[['epic']] %||% 0,
+    power_gained_legendary = power_by_rarity[['legendary']] %||% 0,
     avg_level = avg_level,
     avg_level_common = avg_level_common,
     avg_level_rare = avg_level_rare,

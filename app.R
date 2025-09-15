@@ -1,6 +1,7 @@
 library(shiny)
 library(bslib)
 library(ggplot2)
+library(plotly)
 library(dplyr)
 library(tidyr)
 library(purrr)
@@ -128,7 +129,7 @@ ui <- page_fluid(
           sliderInput("day_range", 
             label = NULL,
             min = 1, max = 360, 
-            value = c(1, 180),
+            value = c(1, 90),
             width = "100%"
           ),
           
@@ -137,6 +138,36 @@ ui <- page_fluid(
       
       navset_pill(
         id = "tabs",
+        selected = "Visualizations",
+        
+        nav_panel("Visualizations",
+          br(),
+          textOutput("range_label", container = function(...) div(class = "range-label", ...)),
+          br(),
+          fluidRow(
+            column(6, div(class = "plot-container", plotlyOutput("plt_trophies"))),
+            column(6, div(class = "plot-container", plotlyOutput("plt_gold")))
+          ),
+          fluidRow(
+            column(12, div(class = "plot-container", plotlyOutput("plt_wallet")))
+          ),
+          fluidRow(
+            column(6, div(class = "plot-container", plotlyOutput("plt_winrate"))),
+            column(6, div(class = "plot-container", plotlyOutput("plt_boxmix")))
+          ),
+          fluidRow(
+            column(6, div(class = "plot-container", plotlyOutput("plt_spend_rarity"))),
+            column(6, div(class = "plot-container", plotlyOutput("plt_power_rarity")))
+          ),
+          fluidRow(
+            column(6, div(class = "plot-container", plotlyOutput("plt_eff_daily"))),
+            column(6, div(class = "plot-container", plotlyOutput("plt_eff_cum")))
+          ),
+          fluidRow(
+            column(6, div(class = "plot-container", plotlyOutput("plt_pass"))),
+            column(6, div(class = "plot-container", plotlyOutput("plt_trophies_drift")))
+          )
+        ),
         
         nav_panel("Daily Table",
           br(),
@@ -149,39 +180,6 @@ ui <- page_fluid(
           h4("Upgrade Efficiency Summary", style = "color: #5865F2;"),
           div(class = "table-container",
             DTOutput("tbl_upg_summary")
-          )
-        ),
-        
-        nav_panel("Visualizations",
-          br(),
-          textOutput("range_label", container = function(...) div(class = "range-label", ...)),
-          br(),
-          fluidRow(
-            column(4, div(class = "metric-card", div(class = "metric-value", textOutput("metric_trophies")), div(class = "metric-label", "Final Trophies"))),
-            column(4, div(class = "metric-card", div(class = "metric-value", textOutput("metric_gold")), div(class = "metric-label", "Total Gold Earned"))),
-            column(4, div(class = "metric-card", div(class = "metric-value", textOutput("metric_winrate")), div(class = "metric-label", "Average Win Rate")))
-          ),
-          tags$hr(class = "thin-sep"),
-          br(),
-          fluidRow(
-            column(6, div(class = "plot-container", plotOutput("plt_trophies"))),
-            column(6, div(class = "plot-container", plotOutput("plt_gold")))
-          ),
-          fluidRow(
-            column(6, div(class = "plot-container", plotOutput("plt_winrate"))),
-            column(6, div(class = "plot-container", plotOutput("plt_boxmix")))
-          ),
-          fluidRow(
-            column(6, div(class = "plot-container", plotOutput("plt_spend_rarity"))),
-            column(6, div(class = "plot-container", plotOutput("plt_power_rarity")))
-          ),
-          fluidRow(
-            column(6, div(class = "plot-container", plotOutput("plt_eff_daily"))),
-            column(6, div(class = "plot-container", plotOutput("plt_eff_cum")))
-          ),
-          fluidRow(
-            column(6, div(class = "plot-container", plotOutput("plt_pass"))),
-            column(6, div(class = "plot-container", plotOutput("plt_trophies_drift")))
           )
         ),
         
@@ -206,9 +204,9 @@ ui <- page_fluid(
             )
           ),
           br(),
-          div(class = "plot-container", plotOutput("cmp_trophies")),
-          div(class = "plot-container", plotOutput("cmp_gold")),
-          div(class = "plot-container", plotOutput("cmp_winrate")),
+          div(class = "plot-container", plotlyOutput("cmp_trophies")),
+          div(class = "plot-container", plotlyOutput("cmp_gold")),
+          div(class = "plot-container", plotlyOutput("cmp_winrate")),
           br(),
           h4("Upgrade Efficiency Comparison", style = "color: #5865F2;"),
           div(class = "table-container", DTOutput("cmp_upg_summary"))
@@ -541,7 +539,7 @@ server <- function(input, output, session) {
     if (!is.null(res)) vals$daily_base <- res$daily %>% mutate(data_version = input$data_version)
   }
 
-  # Initial load: use cache if available, otherwise bundled sample (no compute)
+  # Initial load: use cache if available; otherwise prefer a quick 90-day compute over tiny samples
   observe({
     if (!is.null(vals$daily_base)) return()
     key <- cache_key()
@@ -551,9 +549,18 @@ server <- function(input, output, session) {
       vals$meta <- list(status = "Loaded from cache", time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
     } else {
       smp <- load_bundled_sample_daily()
-      if (!is.null(smp)) {
+      if (!is.null(smp) && nrow(smp) >= 90) {
         vals$daily_base <- smp %>% mutate(data_version = input$data_version)
         vals$meta <- list(status = "Loaded default sample", time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+      } else {
+        # Run a light default simulation to populate 90 days for a richer first view
+        cfg0 <- default_config(days = 90, matches_per_day = 15)
+        cfg0$lucky_drop$enabled <- FALSE
+        sim <- tryCatch(simulate_season(cfg0, seed = 42), error = function(e) NULL)
+        if (!is.null(sim) && is.data.frame(sim$daily)) {
+          vals$daily_base <- sim$daily %>% mutate(data_version = input$data_version)
+          vals$meta <- list(status = "Computed default 90-day run", time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+        }
       }
     }
   })
@@ -637,13 +644,12 @@ server <- function(input, output, session) {
     
     datatable(df,
       options = list(
-        pageLength = 10,
+        pageLength = 15,
         scrollX = TRUE,
-        dom = 'frtip',
-        searchHighlight = TRUE
+        dom = 'tip'  # tight: table info + pagination only
       ),
       rownames = FALSE,
-      class = 'table-striped table-hover'
+      class = 'compact stripe hover'
     ) %>%
       formatRound(columns = c("winrate", "power_bonus"), digits = 3) %>%
       formatCurrency(columns = c("gold_total", "gold_from_matches", "gold_from_pass", "gold_spent_upgrades"), currency = "", interval = 3, mark = ",", digits = 0)
@@ -706,80 +712,92 @@ server <- function(input, output, session) {
         Value = c(total_spend, total_upgrades, avg_gold_per_upgrade, total_power, power_per_upgrade, power_per_1k_gold, upgrades_per_day, spend_per_day, bank),
         check.names = FALSE
       )
-      datatable(summary, 
+      datatable(
+        summary,
         options = list(dom = 't', pageLength = 10),
         rownames = FALSE,
-        class = 'table-striped'
-      ) %>%
-        formatCurrency(columns = c("Value"), currency = "", interval = 3, mark = ",", digits = 0)
+        class = 'compact stripe hover'
+      ) %>% formatCurrency(columns = c("Value"), currency = "", interval = 3, mark = ",", digits = 0)
     }
   })
   
   # Plots
-  output$plt_trophies <- renderPlot({
+  output$plt_trophies <- renderPlotly({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    plot_trophies(df)
+    ggplotly(plot_trophies(df))
   })
   
-  output$plt_gold <- renderPlot({
+  output$plt_gold <- renderPlotly({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    plot_gold_flow(df)
+    ggplotly(plot_gold_flow(df))
+  })
+
+  output$plt_wallet <- renderPlotly({
+    req(vals$daily_base)
+    df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
+    ggplotly(plot_wallet_balance(df))
   })
   
-  output$plt_winrate <- renderPlot({
+  output$plt_winrate <- renderPlotly({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
     p <- plot_winrate(df)
     if (isTRUE(input$show_smooth)) p <- p + geom_smooth(se = FALSE, method = 'loess', span = 0.3, color = '#94a3b8')
-    p
+    ggplotly(p)
   })
   
-  output$plt_boxmix <- renderPlot({
+  output$plt_boxmix <- renderPlotly({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    plot_box_rarity_mix(df)
+    plt <- plot_box_rarity_mix(df)
+    if (is.null(plt)) return(NULL)
+    ggplotly(plt)
   })
   
-  output$plt_spend_rarity <- renderPlot({
+  output$plt_spend_rarity <- renderPlotly({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    plot_spend_by_rarity_range(df)
+    plt <- plot_spend_by_rarity_range(df)
+    if (is.null(plt)) return(NULL)
+    ggplotly(plt)
   })
   
-  output$plt_power_rarity <- renderPlot({
+  output$plt_power_rarity <- renderPlotly({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    plot_power_by_rarity_range(df)
+    plt <- plot_power_by_rarity_range(df)
+    if (is.null(plt)) return(NULL)
+    ggplotly(plt)
   })
   
-  output$plt_eff_daily <- renderPlot({
+  output$plt_eff_daily <- renderPlotly({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
     p <- plot_upgrade_efficiency_daily(df)
     if (isTRUE(input$show_smooth)) p <- p + geom_smooth(se = FALSE, method = 'loess', span = 0.3, color = '#16a34a')
-    p
+    ggplotly(p)
   })
   
-  output$plt_eff_cum <- renderPlot({
+  output$plt_eff_cum <- renderPlotly({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
     p <- plot_upgrade_efficiency_cum(df)
     if (isTRUE(input$show_smooth)) p <- p + geom_smooth(se = FALSE, method = 'loess', span = 0.3, color = '#065f46')
-    p
+    ggplotly(p)
   })
   
-  output$plt_pass <- renderPlot({
+  output$plt_pass <- renderPlotly({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    plot_pass_progress(df)
+    ggplotly(plot_pass_progress(df))
   })
   
-  output$plt_trophies_drift <- renderPlot({
+  output$plt_trophies_drift <- renderPlotly({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    plot_trophies_drift(df)
+    ggplotly(plot_trophies_drift(df))
   })
 
   # E2E beacon: publish minimal health/status JSON for automation
@@ -825,29 +843,29 @@ server <- function(input, output, session) {
     vals$cmp_results <- results
   })
   
-  output$cmp_trophies <- renderPlot({
+  output$cmp_trophies <- renderPlotly({
     req(length(vals$cmp_results) > 0)
     df <- bind_rows(vals$cmp_results)
     dd <- df %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    ggplot(dd, aes(day, trophies_end, color = config)) + geom_line() +
-      labs(title = "Trophies Comparison", x = "Day", y = "Trophies") + theme_minimal(base_size = 12)
+    ggplotly(ggplot(dd, aes(day, trophies_end, color = config)) + geom_line() +
+      labs(title = "Trophies Comparison", x = "Day", y = "Trophies") + theme_minimal(base_size = 12))
   })
   
-  output$cmp_gold <- renderPlot({
+  output$cmp_gold <- renderPlotly({
     req(length(vals$cmp_results) > 0)
     df <- bind_rows(vals$cmp_results)
     dd <- df %>% filter(day >= input$day_range[1] & day <= input$day_range[2]) %>%
       group_by(config) %>% arrange(day, .by_group = TRUE) %>% mutate(cum_gold = cumsum(gold_total))
-    ggplot(dd, aes(day, cum_gold, color = config)) + geom_line() +
-      labs(title = "Cumulative Gold Comparison", x = "Day", y = "Gold (cumulative)") + theme_minimal(base_size = 12)
+    ggplotly(ggplot(dd, aes(day, cum_gold, color = config)) + geom_line() +
+      labs(title = "Cumulative Gold Comparison", x = "Day", y = "Gold (cumulative)") + theme_minimal(base_size = 12))
   })
   
-  output$cmp_winrate <- renderPlot({
+  output$cmp_winrate <- renderPlotly({
     req(length(vals$cmp_results) > 0)
     df <- bind_rows(vals$cmp_results)
     dd <- df %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    ggplot(dd, aes(day, winrate*100, color = config)) + geom_line() +
-      labs(title = "Winrate Comparison", x = "Day", y = "Winrate (%)") + theme_minimal(base_size = 12)
+    ggplotly(ggplot(dd, aes(day, winrate*100, color = config)) + geom_line() +
+      labs(title = "Winrate Comparison", x = "Day", y = "Winrate (%)") + theme_minimal(base_size = 12))
   })
   
   output$cmp_upg_summary <- renderDT({
@@ -874,9 +892,9 @@ server <- function(input, output, session) {
     summary_df <- bind_rows(summary_list)
     
     datatable(summary_df, 
-      options = list(pageLength = 10),
+      options = list(dom = 't', pageLength = 10),
       rownames = FALSE,
-      class = 'table-striped table-hover'
+      class = 'compact stripe hover'
     ) %>%
       formatCurrency(columns = c("Gold Spent"), currency = "", interval = 3, mark = ",", digits = 0) %>%
       formatRound(columns = c("Upgrades", "Final Trophies", "Final Power"), digits = 0) %>%
