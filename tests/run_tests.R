@@ -12,6 +12,8 @@ source("R/sim_config.R")
 source("R/lucky_star.R")
 source("R/sim_economy.R")
 source("R/plots.R")
+source("R/cache_manager.R")
+source("R/config_store.R")
 
 green <- function(x) paste0("\033[32m", x, "\033[39m")
 red   <- function(x) paste0("\033[31m", x, "\033[39m")

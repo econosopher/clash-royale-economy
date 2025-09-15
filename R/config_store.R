@@ -1,7 +1,8 @@
 library(jsonlite)
 
 config_store_path <- function() {
-  normalizePath(file.path("assets", "configs"), mustWork = FALSE)
+  base <- getOption("cr_config_store_path", default = file.path("assets", "configs"))
+  normalizePath(base, mustWork = FALSE)
 }
 
 config_store_file <- function() {
@@ -41,4 +42,3 @@ save_config <- function(name, cfg) {
   write_json(cfgs, f, pretty = TRUE, auto_unbox = TRUE)
   invisible(TRUE)
 }
-

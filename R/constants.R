@@ -1,0 +1,107 @@
+#' @title Simulation Constants
+#' @description Central location for all simulation constants to avoid magic numbers
+
+# Arena Constants
+TROPHIES_PER_ARENA <- 400L
+MAX_ARENA_INDEX <- 11L
+DEFAULT_ARENA_COUNT <- 12L
+
+# Trophy System
+DEFAULT_TROPHIES_ON_WIN <- 30L
+DEFAULT_TROPHIES_ON_LOSS <- -29L
+MIN_TROPHIES <- 0L
+
+# Match Constants  
+DEFAULT_MATCHES_PER_DAY <- 15L
+MAX_MATCHES_PER_DAY <- 100L
+DEFAULT_BASE_WINRATE <- 0.5
+DEFAULT_BOT_RATE <- 0.1
+DEFAULT_BOT_WINRATE <- 0.9
+
+# Gold System
+DEFAULT_GOLD_PER_WIN <- 10L
+DEFAULT_PASS_GOLD_PER_LEVEL <- 50L
+MIN_GOLD_AMOUNT <- 0L
+
+# Pass System
+DEFAULT_CROWNS_PER_LEVEL <- 20L
+MAX_CROWNS_PER_MATCH <- 3L
+
+# Mystery Box System
+DEFAULT_DAILY_BOX_CAP <- 4L
+MAX_DAILY_BOXES <- 100L
+
+# Card System
+COMMON_CARD_COUNT <- 28L
+RARE_CARD_COUNT <- 28L
+EPIC_CARD_COUNT <- 28L
+LEGENDARY_CARD_COUNT <- 17L
+
+# Rarity Weights (by trophy range)
+RARITY_WEIGHTS_0_1400 <- c(common = 70, rare = 25, epic = 4, legendary = 1)
+RARITY_WEIGHTS_1400_2800 <- c(common = 60, rare = 30, epic = 8, legendary = 2)
+RARITY_WEIGHTS_2800_4200 <- c(common = 50, rare = 35, epic = 12, legendary = 3)
+RARITY_WEIGHTS_4200_5600 <- c(common = 40, rare = 38, epic = 17, legendary = 5)
+RARITY_WEIGHTS_5600_PLUS <- c(common = 30, rare = 40, epic = 22, legendary = 8)
+
+# Card Quantity Ranges
+COMMON_QUANTITY_RANGE <- c(5L, 15L)
+RARE_QUANTITY_RANGE <- c(2L, 6L)
+EPIC_QUANTITY_RANGE <- c(1L, 2L)
+LEGENDARY_QUANTITY_RANGE <- c(1L, 1L)
+
+# Level-up Chest
+LEVELUP_CHEST_WEIGHTS <- c(common = 50, rare = 30, epic = 15, legendary = 5)
+LEVELUP_CHEST_COMMON_QTY <- c(20L, 40L)
+LEVELUP_CHEST_RARE_QTY <- c(10L, 20L)
+LEVELUP_CHEST_EPIC_QTY <- c(2L, 5L)
+LEVELUP_CHEST_LEGENDARY_QTY <- c(1L, 2L)
+
+# Progression System
+MAX_UPGRADE_ITERATIONS <- 10000L
+POWER_SLOPE_DEFAULT <- 0.0005
+POWER_CAP_DEFAULT <- 0.20
+MM_CONVERGENCE_DEFAULT <- 0.15
+
+# Account Level Thresholds
+ACCOUNT_LEVEL_THRESHOLDS <- c(
+  0, 20, 50, 100, 200, 400, 800, 1600, 3200, 6400,
+  12800, 25600, 51200, 102400, 204800
+)
+
+# Crown Distribution Defaults (Win)
+DEFAULT_CROWN_DIST_WIN <- c(`0` = 0.0, `1` = 0.20, `2` = 0.50, `3` = 0.30)
+
+# Crown Distribution Defaults (Loss)
+DEFAULT_CROWN_DIST_LOSS <- c(`0` = 0.40, `1` = 0.40, `2` = 0.20, `3` = 0.0)
+
+# Lucky Star System
+DEFAULT_LUCKY_WINS <- 3L
+DEFAULT_LUCKY_SPINS <- 4L
+MAX_LUCKY_SPINS <- 10L
+
+# Simulation Limits
+MAX_SIMULATION_DAYS <- 1000L
+MIN_SIMULATION_DAYS <- 1L
+DEFAULT_SIMULATION_DAYS <- 30L
+FULL_SEASON_DAYS <- 360L
+
+# Cache Settings
+CACHE_EXPIRY_MINUTES <- 60L
+CACHE_MAX_SIZE_MB <- 100L
+
+# UI Constants
+DEFAULT_SHINY_PORT <- 7789L
+DEFAULT_SHINY_HOST <- "127.0.0.1"
+DEFAULT_DAY_RANGE_MIN <- 1L
+DEFAULT_DAY_RANGE_MAX <- 180L
+
+# Plot Export Settings
+PLOT_WIDTH_INCHES <- 10
+PLOT_HEIGHT_INCHES <- 6
+PLOT_DPI <- 144
+PLOT_JPEG_QUALITY <- 95
+
+# Validation Tolerances
+PROBABILITY_SUM_TOLERANCE <- 0.001
+RATIO_ROUNDING_DIGITS <- 8L

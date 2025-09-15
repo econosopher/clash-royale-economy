@@ -22,35 +22,117 @@
       "gold_per_level": 50
     },
     "crown_dist": {
-      "on_win": [0, 0.2, 0.5, 0.3],
-      "on_loss": [0.4, 0.4, 0.2, 0]
+      "on_win": [
+        0,
+        0.2,
+        0.5,
+        0.3
+      ],
+      "on_loss": [
+        0.4,
+        0.4,
+        0.2,
+        0
+      ]
     },
     "lucky_drop": {
       "enabled": true,
       "wins_with_lucky_drops": 3,
       "spins": 4,
-      "gold_reward_by_star": [0, 0, 0, 0, 0]
+      "gold_reward_by_star": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
     },
     "progression": {
       "by_rarity": {
         "common": {
-          "copies_per_level": [2, 4, 10, 20, 50, 100, 200, 400, 800, 1000],
-          "gold_cost_per_level": [20, 50, 150, 400, 1000, 2000, 4000, 8000, 20000, 50000],
+          "copies_per_level": [
+            2,
+            4,
+            10,
+            20,
+            50,
+            100,
+            200,
+            400,
+            800,
+            1000
+          ],
+          "gold_cost_per_level": [
+            20,
+            50,
+            150,
+            400,
+            1000,
+            2000,
+            4000,
+            8000,
+            20000,
+            50000
+          ],
           "power_per_level_step": 1
         },
         "rare": {
-          "copies_per_level": [2, 4, 10, 20, 50, 100, 200, 400],
-          "gold_cost_per_level": [50, 150, 400, 1000, 2000, 5000, 10000, 20000],
+          "copies_per_level": [
+            2,
+            4,
+            10,
+            20,
+            50,
+            100,
+            200,
+            400
+          ],
+          "gold_cost_per_level": [
+            50,
+            150,
+            400,
+            1000,
+            2000,
+            5000,
+            10000,
+            20000
+          ],
           "power_per_level_step": 2.5
         },
         "epic": {
-          "copies_per_level": [1, 2, 4, 10, 20, 50],
-          "gold_cost_per_level": [400, 1000, 2000, 5000, 10000, 20000],
+          "copies_per_level": [
+            1,
+            2,
+            4,
+            10,
+            20,
+            50
+          ],
+          "gold_cost_per_level": [
+            400,
+            1000,
+            2000,
+            5000,
+            10000,
+            20000
+          ],
           "power_per_level_step": 6
         },
         "legendary": {
-          "copies_per_level": [1, 1, 2, 4, 10],
-          "gold_cost_per_level": [2000, 5000, 10000, 20000, 50000],
+          "copies_per_level": [
+            1,
+            1,
+            2,
+            4,
+            10
+          ],
+          "gold_cost_per_level": [
+            2000,
+            5000,
+            10000,
+            20000,
+            50000
+          ],
           "power_per_level_step": 15
         }
       }
@@ -133,35 +215,117 @@
       "gold_per_level": 50
     },
     "crown_dist": {
-      "on_win": [0, 0.2, 0.5, 0.3],
-      "on_loss": [0.4, 0.4, 0.2, 0]
+      "on_win": [
+        0,
+        0.2,
+        0.5,
+        0.3
+      ],
+      "on_loss": [
+        0.4,
+        0.4,
+        0.2,
+        0
+      ]
     },
     "lucky_drop": {
       "enabled": true,
       "wins_with_lucky_drops": 3,
       "spins": 4,
-      "gold_reward_by_star": [0, 0, 0, 0, 0]
+      "gold_reward_by_star": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
     },
     "progression": {
       "by_rarity": {
         "common": {
-          "copies_per_level": [2, 4, 10, 20, 50, 100, 200, 400, 800, 1000],
-          "gold_cost_per_level": [20, 50, 150, 400, 1000, 2000, 4000, 8000, 20000, 50000],
+          "copies_per_level": [
+            2,
+            4,
+            10,
+            20,
+            50,
+            100,
+            200,
+            400,
+            800,
+            1000
+          ],
+          "gold_cost_per_level": [
+            20,
+            50,
+            150,
+            400,
+            1000,
+            2000,
+            4000,
+            8000,
+            20000,
+            50000
+          ],
           "power_per_level_step": 1
         },
         "rare": {
-          "copies_per_level": [2, 4, 10, 20, 50, 100, 200, 400],
-          "gold_cost_per_level": [50, 150, 400, 1000, 2000, 5000, 10000, 20000],
+          "copies_per_level": [
+            2,
+            4,
+            10,
+            20,
+            50,
+            100,
+            200,
+            400
+          ],
+          "gold_cost_per_level": [
+            50,
+            150,
+            400,
+            1000,
+            2000,
+            5000,
+            10000,
+            20000
+          ],
           "power_per_level_step": 2.5
         },
         "epic": {
-          "copies_per_level": [1, 2, 4, 10, 20, 50],
-          "gold_cost_per_level": [400, 1000, 2000, 5000, 10000, 20000],
+          "copies_per_level": [
+            1,
+            2,
+            4,
+            10,
+            20,
+            50
+          ],
+          "gold_cost_per_level": [
+            400,
+            1000,
+            2000,
+            5000,
+            10000,
+            20000
+          ],
           "power_per_level_step": 6
         },
         "legendary": {
-          "copies_per_level": [1, 1, 2, 4, 10],
-          "gold_cost_per_level": [2000, 5000, 10000, 20000, 50000],
+          "copies_per_level": [
+            1,
+            1,
+            2,
+            4,
+            10
+          ],
+          "gold_cost_per_level": [
+            2000,
+            5000,
+            10000,
+            20000,
+            50000
+          ],
           "power_per_level_step": 15
         }
       }
@@ -241,6 +405,200 @@
     },
     "pass_config": {
       "crowns_per_level": 10,
+      "gold_per_level": 50
+    },
+    "crown_dist": {
+      "on_win": [
+        0,
+        0.2,
+        0.5,
+        0.3
+      ],
+      "on_loss": [
+        0.4,
+        0.4,
+        0.2,
+        0
+      ]
+    },
+    "lucky_drop": {
+      "enabled": true,
+      "wins_with_lucky_drops": 3,
+      "spins": 4,
+      "gold_reward_by_star": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "progression": {
+      "by_rarity": {
+        "common": {
+          "copies_per_level": [
+            2,
+            4,
+            10,
+            20,
+            50,
+            100,
+            200,
+            400,
+            800,
+            1000
+          ],
+          "gold_cost_per_level": [
+            20,
+            50,
+            150,
+            400,
+            1000,
+            2000,
+            4000,
+            8000,
+            20000,
+            50000
+          ],
+          "power_per_level_step": 1
+        },
+        "rare": {
+          "copies_per_level": [
+            2,
+            4,
+            10,
+            20,
+            50,
+            100,
+            200,
+            400
+          ],
+          "gold_cost_per_level": [
+            50,
+            150,
+            400,
+            1000,
+            2000,
+            5000,
+            10000,
+            20000
+          ],
+          "power_per_level_step": 2.5
+        },
+        "epic": {
+          "copies_per_level": [
+            1,
+            2,
+            4,
+            10,
+            20,
+            50
+          ],
+          "gold_cost_per_level": [
+            400,
+            1000,
+            2000,
+            5000,
+            10000,
+            20000
+          ],
+          "power_per_level_step": 6
+        },
+        "legendary": {
+          "copies_per_level": [
+            1,
+            1,
+            2,
+            4,
+            10
+          ],
+          "gold_cost_per_level": [
+            2000,
+            5000,
+            10000,
+            20000,
+            50000
+          ],
+          "power_per_level_step": 15
+        }
+      }
+    },
+    "power_to_winrate": {
+      "slope": 0.0005,
+      "max_bonus": 0.2
+    },
+    "arenas": [
+      {
+        "name": "Arena 1",
+        "min_trophies": 0
+      },
+      {
+        "name": "Arena 2",
+        "min_trophies": 400
+      },
+      {
+        "name": "Arena 3",
+        "min_trophies": 800
+      },
+      {
+        "name": "Arena 4",
+        "min_trophies": 1200
+      },
+      {
+        "name": "Arena 5",
+        "min_trophies": 1600
+      },
+      {
+        "name": "Arena 6",
+        "min_trophies": 2000
+      },
+      {
+        "name": "Arena 7",
+        "min_trophies": 2400
+      },
+      {
+        "name": "Arena 8",
+        "min_trophies": 2800
+      },
+      {
+        "name": "Arena 9",
+        "min_trophies": 3200
+      },
+      {
+        "name": "Arena 10",
+        "min_trophies": 3600
+      },
+      {
+        "name": "Arena 11",
+        "min_trophies": 4000
+      },
+      {
+        "name": "Arena 12",
+        "min_trophies": 4400
+      }
+    ]
+  },
+  "UnitTestConfig": {
+    "days": 5,
+    "matches_per_day": 5,
+    "jitter_matches": 0,
+    "base_winrate": 0.5,
+    "bot_rate": 0.1,
+    "bot_winrate": 0.9,
+    "vertical_winrate_bonus": 0,
+    "mm_convergence_per_arena": 0.15,
+    "trophies_on_win": 30,
+    "trophies_on_loss": -29,
+    "gold_drop": {
+      "fixed_amount": "NA",
+      "min_amount": 10,
+      "max_amount": 10
+    },
+    "caps": {
+      "daily_mystery_boxes": 4
+    },
+    "pass_config": {
+      "crowns_per_level": 20,
       "gold_per_level": 50
     },
     "crown_dist": {

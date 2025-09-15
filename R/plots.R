@@ -3,18 +3,46 @@ library(dplyr)
 library(tidyr)
 library(readr)
 
+# Default visualization helpers (538-inspired styling without extra deps)
+theme_538ish <- function(base_size = 12) {
+  theme_minimal(base_size = base_size) +
+    theme(
+      plot.title.position = "panel",
+      plot.title = element_text(hjust = 0, face = "bold", color = "#0f172a"),
+      plot.subtitle = element_text(hjust = 0, color = "#475569"),
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "#e2e8f0", linewidth = 0.2),
+      panel.background = element_rect(fill = "white", colour = NA),
+      plot.background = element_rect(fill = "white", colour = NA),
+      axis.title = element_text(face = "bold", color = "#0f172a"),
+      axis.text = element_text(color = "#334155"),
+      legend.title = element_blank(),
+      legend.key = element_blank()
+    )
+}
+
 plot_trophies <- function(df) {
   # arena bands by contiguous spans
   spans <- df %>% mutate(arena = arena_end) %>%
     mutate(group = cumsum(c(1, diff(as.integer(factor(arena))) != 0))) %>%
     group_by(group, arena) %>% summarise(xmin = min(day)-0.5, xmax = max(day)+0.5, .groups = 'drop')
+  
+  # Add arena name annotations
+  arena_labels <- spans %>%
+    mutate(label_x = xmin + (xmax - xmin) / 2,
+           label_y = min(df$trophies_end) + 50) # A bit above the bottom
+
   ggplot(df, aes(day, trophies_end)) +
-    {if(nrow(spans)>0) geom_rect(data=spans, inherit.aes = FALSE, aes(xmin=xmin, xmax=xmax, ymin=-Inf, ymax=Inf), fill="#e2e8f0", alpha=0.18)} +
-    geom_line(color = "#2563eb") +
+    {if(nrow(spans)>0) geom_rect(data=spans, inherit.aes = FALSE, aes(xmin=xmin, xmax=xmax, ymin=-Inf, ymax=Inf), fill="#e2e8f0", alpha=0.16)} +
+    geom_line(color = "#2563eb", linewidth = 1) +
     geom_hline(yintercept = seq(0, max(df$trophies_end, na.rm = TRUE) + 400, by = 400),
-               linetype = "dotted", color = "#94a3b8", size = 0.2) +
-    labs(title = "Trophies by Day", x = "Day", y = "Trophies") +
-    theme_minimal(base_size = 12)
+               linetype = "dotted", color = "#cbd5f5", linewidth = 0.25) +
+    geom_text(data = arena_labels, aes(x = label_x, y = label_y, label = arena),
+              size = 3, color = "#475569", fontface = "bold", check_overlap = TRUE) +
+    scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0.02, 0.05))) +
+    scale_x_continuous(expand = expansion(mult = c(0, 0.01))) +
+    labs(title = "Trophies by Day", x = "Day", y = "Trophies", subtitle = "End-of-day trophy totals") +
+    theme_538ish(12)
 }
 
 plot_gold_flow <- function(df) {
@@ -23,35 +51,47 @@ plot_gold_flow <- function(df) {
            bank = cumsum(income - spend)) %>%
     pivot_longer(cols = c(matches, pass), names_to = 'src', values_to = 'gold')
   ggplot(dd, aes(day, gold, fill = src)) +
-    geom_area(alpha = 0.7, position = 'stack') +
-    geom_line(aes(y = bank, color = 'bank'), size = 0.8, inherit.aes = FALSE) +
-    scale_fill_manual(values = c(matches = "#2563eb", pass = "#7c3aed"), name = "Gold") +
-    scale_color_manual(values = c(bank = "#111827"), name = " ") +
-    labs(title = "Gold Earned per Day + Bank", x = "Day", y = "Gold") +
-    theme_minimal(base_size = 12)
+    geom_area(alpha = 0.75, position = 'stack') +
+    geom_line(aes(x = day, y = bank, color = 'bank'), linewidth = 0.9, inherit.aes = FALSE) +
+    scale_fill_manual(values = c(matches = "#2563eb", pass = "#7c3aed"), labels = c(matches = "Match Rewards", pass = "Pass Rewards")) +
+    scale_color_manual(values = c(bank = "#0f172a"), labels = c(bank = "Gold Bank")) +
+    scale_y_continuous(labels = scales::comma) +
+    labs(title = "Daily Gold Flow", subtitle = "Income sources and cumulative bank", x = "Day", y = "Gold") +
+    guides(fill = guide_legend(title = NULL), color = guide_legend(title = NULL)) +
+    theme_538ish(12)
 }
 
 plot_winrate <- function(df) {
   ggplot(df, aes(day, winrate*100)) +
-    geom_line(color = "#10b981") +
-    geom_hline(yintercept = 50, linetype = "dotted", color = "#94a3b8") +
-    labs(title = "Winrate Over Time", x = "Day", y = "Winrate (%)") +
-    theme_minimal(base_size = 12)
+    geom_line(color = "#10b981", linewidth = 1) +
+    geom_hline(yintercept = 50, linetype = "dotted", color = "#cbd5f5") +
+    scale_y_continuous(labels = scales::label_percent(accuracy = 1, scale = 1), limits = c(0, 100), expand = expansion(mult = c(0, 0.05))) +
+    labs(title = "Win Rate Over Time", subtitle = "Daily mean win percentage", x = "Day", y = "Win Rate") +
+    theme_538ish(12)
 }
 
 plot_box_rarity_mix <- function(df) {
   if (!"box_drops_by_rarity" %in% names(df)) return(NULL)
-  # Expand list-column
-  expand <- function(x) {
-    # x may be a named numeric vector or a list containing that vector
-    b <- if (is.list(x) && length(x) == 1) x[[1]] else x
-    cm <- as.numeric(b["common"]); if (is.na(cm)) cm <- 0
-    rr <- as.numeric(b["rare"]); if (is.na(rr)) rr <- 0
-    ep <- as.numeric(b["epic"]); if (is.na(ep)) ep <- 0
-    lg <- as.numeric(b["legendary"]); if (is.na(lg)) lg <- 0
-    tibble::tibble(common = cm, rare = rr, epic = ep, legendary = lg)
+  # Handle both list-column of named numerics and nested data.frame columns
+  if (is.list(df$box_drops_by_rarity) && !is.data.frame(df$box_drops_by_rarity)) {
+    expand <- function(x) {
+      b <- if (is.list(x) && length(x) == 1) x[[1]] else x
+      cm <- as.numeric(b["common"]); if (is.na(cm)) cm <- 0
+      rr <- as.numeric(b["rare"]); if (is.na(rr)) rr <- 0
+      ep <- as.numeric(b["epic"]); if (is.na(ep)) ep <- 0
+      lg <- as.numeric(b["legendary"]); if (is.na(lg)) lg <- 0
+      tibble::tibble(common = cm, rare = rr, epic = ep, legendary = lg)
+    }
+    base <- dplyr::bind_rows(lapply(df$box_drops_by_rarity, expand))
+  } else if (is.data.frame(df$box_drops_by_rarity)) {
+    base <- tibble::as_tibble(df$box_drops_by_rarity)
+    # Ensure required columns exist
+    for (nm in c("common","rare","epic","legendary")) if (!nm %in% names(base)) base[[nm]] <- 0
+    base <- base[, c("common","rare","epic","legendary")]
+  } else {
+    return(NULL)
   }
-  rr <- bind_rows(lapply(df$box_drops_by_rarity, expand)) |>
+  rr <- base |>
     mutate(day = df$day, total = pmax(1, common+rare+epic+legendary)) |>
     mutate(across(c(common,rare,epic,legendary), ~ .x/total*100)) |>
     select(day, common, rare, epic, legendary) |>
@@ -59,8 +99,9 @@ plot_box_rarity_mix <- function(df) {
   ggplot(rr, aes(day, share, fill = rarity)) +
     geom_area(position = "stack") +
     scale_fill_manual(values = c(common="#94a3b8", rare="#2563eb", epic="#7c3aed", legendary="#f59e0b")) +
-    labs(title = "Box Rarity Mix (% per day)", x = "Day", y = "%") +
-    theme_minimal(base_size = 12)
+    scale_y_continuous(labels = scales::label_percent(accuracy = 1, scale = 1)) +
+    labs(title = "Mystery Box Rarity Mix", subtitle = "Share of boxes earned per rarity", x = "Day", y = "Share of Daily Boxes") +
+    theme_538ish(12)
 }
 
 # Research plots
@@ -92,7 +133,7 @@ plot_research_upgrades_cum <- function() {
     geom_line() + geom_point(size = 1) +
     scale_color_manual(values = c(Common="#94a3b8", Rare="#2563eb", Epic="#7c3aed", Legendary="#f59e0b", Champion="#10b981")) +
     labs(title = "Card Upgrade Cumulative Gold (Derived)", x = "Target Level", y = "Cumulative Gold", color = "Rarity") +
-    theme_minimal(base_size = 12)
+    theme_538ish(12)
 }
 
 plot_research_lucky_final <- function() {
@@ -144,7 +185,7 @@ plot_pass_progress <- function(df) {
     geom_line(color = "#0ea5e9") +
     geom_hline(data = ticks, aes(yintercept = y), linetype = "dotted", color = "#e5e7eb") +
     labs(title = "Pass Progress (Crowns)", x = "Day", y = "Crowns (cumulative)") +
-    theme_minimal(base_size = 12)
+    theme_538ish(12)
 }
 
 plot_trophies_drift <- function(df) {
@@ -153,7 +194,7 @@ plot_trophies_drift <- function(df) {
     geom_col(fill = "#f59e0b") +
     geom_hline(yintercept = 0, linetype = "dotted", color = "#94a3b8") +
     labs(title = "Trophies Drift (per day)", x = "Day", y = "Δ Trophies") +
-    theme_minimal(base_size = 12)
+    theme_538ish(12)
 }
 
 plot_deck_levels <- function(df) {
@@ -161,11 +202,11 @@ plot_deck_levels <- function(df) {
   dd <- df %>% select(day, common = avg_level_common, rare = avg_level_rare, epic = avg_level_epic, legendary = avg_level_legendary, overall = avg_level)
   long <- dd %>% pivot_longer(cols = c(common, rare, epic, legendary), names_to = 'rarity', values_to = 'avg_level_r')
   ggplot() +
-    geom_line(data = long, aes(day, avg_level_r, color = rarity), size = 0.9) +
-    geom_line(data = dd, aes(day, overall, color = 'overall'), size = 1.1, linetype = 'dashed') +
+    geom_line(data = long, aes(day, avg_level_r, color = rarity), linewidth = 0.9) +
+    geom_line(data = dd, aes(day, overall, color = 'overall'), linewidth = 1.1, linetype = 'dashed') +
     scale_color_manual(values = c(common="#94a3b8", rare="#2563eb", epic="#7c3aed", legendary="#f59e0b", overall="#111827"), name = "Rarity") +
     labs(title = "Average Card Level by Rarity (with Overall)", x = "Day", y = "Avg Level") +
-    theme_minimal(base_size = 12)
+    theme_538ish(12)
 }
 
 plot_upgrade_efficiency_daily <- function(df) {
@@ -174,7 +215,7 @@ plot_upgrade_efficiency_daily <- function(df) {
     geom_line(color = "#16a34a") +
     geom_point(color = "#16a34a", size = 1.8, na.rm = TRUE) +
     labs(title = "Upgrade Efficiency (Daily Power per 1k Gold)", x = "Day", y = "Power / 1k Gold") +
-    theme_minimal(base_size = 12)
+    theme_538ish(12)
 }
 
 plot_upgrade_efficiency_cum <- function(df) {
@@ -182,7 +223,7 @@ plot_upgrade_efficiency_cum <- function(df) {
   ggplot(dd, aes(day, eff)) +
     geom_line(color = "#065f46") +
     labs(title = "Upgrade Efficiency (Cumulative Power per 1k Gold)", x = "Day", y = "Power / 1k Gold") +
-    theme_minimal(base_size = 12)
+    theme_538ish(12)
 }
 
 plot_spend_by_rarity_range <- function(df) {
@@ -206,7 +247,7 @@ plot_spend_by_rarity_range <- function(df) {
     geom_col() +
     scale_fill_manual(values = c(Common="#94a3b8", Rare="#2563eb", Epic="#7c3aed", Legendary="#f59e0b"), guide = 'none') +
     labs(title = "Gold Spent by Rarity (Selected Range)", x = "Rarity", y = "Gold") +
-    theme_minimal(base_size = 12)
+    theme_538ish(12)
 }
 
 plot_power_by_rarity_range <- function(df) {
@@ -229,5 +270,5 @@ plot_power_by_rarity_range <- function(df) {
     geom_col() +
     scale_fill_manual(values = c(Common="#94a3b8", Rare="#2563eb", Epic="#7c3aed", Legendary="#f59e0b"), guide = 'none') +
     labs(title = "Power Gained by Rarity (Selected Range)", x = "Rarity", y = "Power") +
-    theme_minimal(base_size = 12)
+    theme_538ish(12)
 }

@@ -12,6 +12,33 @@ library(digest)
 
 `%||%` <- function(a,b) if (is.null(a)) b else a
 
+# Optional: write stdout/stderr to a log file if CR_SHINY_LOG_FILE is set
+log_file <- Sys.getenv('CR_SHINY_LOG_FILE', unset = '')
+if (nzchar(log_file)) {
+  dir.create(dirname(log_file), recursive = TRUE, showWarnings = FALSE)
+  try({ sink(log_file, append = TRUE, split = TRUE); sink(log_file, append = TRUE, type = 'message') }, silent = TRUE)
+}
+
+# Data-version helpers for editable research tables
+base_tables_dir <- function() normalizePath(file.path("assets","research","gemini","tables"), mustWork = FALSE)
+custom_root_dir <- function() normalizePath(file.path("assets","research","custom"), mustWork = FALSE)
+data_versions <- function() {
+  root <- custom_root_dir()
+  if (!dir.exists(root)) return(c("Base"))
+  subs <- list.dirs(root, full.names = FALSE, recursive = FALSE)
+  subs <- subs[nzchar(subs)]
+  if (length(subs) == 0) c("Base") else c("Base", sort(unique(subs)))
+}
+data_version_path <- function(ver) {
+  if (identical(ver, "Base") || is.null(ver) || !nzchar(ver)) return(base_tables_dir())
+  file.path(custom_root_dir(), ver, "tables")
+}
+ensure_version_dirs <- function(ver) {
+  if (is.null(ver) || !nzchar(ver)) return(FALSE)
+  dir.create(file.path(custom_root_dir(), ver, "tables"), recursive = TRUE, showWarnings = FALSE)
+  TRUE
+}
+
 # Small helper for Bootstrap 5 tooltips on info icons
 help_icon <- function(text) {
   tagList(tags$span(class = "ms-1 text-muted",
@@ -32,14 +59,14 @@ source("R/config_store.R")
 # Custom theme with modern gaming aesthetic
 custom_theme <- bs_theme(
   version = 5,
-  bg = "#f8f9fa",
-  fg = "#212529",
-  primary = "#5865F2",
-  secondary = "#EB459E",
-  success = "#57F287",
-  info = "#00D9FF",
-  warning = "#FEE75C",
-  danger = "#ED4245",
+  bg = "#f4f6fb",
+  fg = "#111827",
+  primary = "#2563eb",
+  secondary = "#475569",
+  success = "#16a34a",
+  info = "#0ea5e9",
+  warning = "#f59e0b",
+  danger = "#ef4444",
   font_scale = 1.0,
   `enable-rounded` = TRUE
 )
@@ -49,30 +76,36 @@ ui <- page_fluid(
   tags$head(
     tags$title("Clash Economy Simulator"),
     tags$style(HTML("
-      body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
-      .main-container { background: rgba(255,255,255,0.95); border-radius: 12px; padding: 20px; margin: 20px auto; max-width: 1400px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
-      .sidebar-card { background: white; border-radius: 8px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-      .sidebar-card .form-group { margin-bottom: 6px; }
-      .sidebar-card hr { margin: 8px 0; }
-      .sidebar-header { font-weight: 600; color: #5865F2; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #5865F2; }
-      .btn-run { background: linear-gradient(90deg, #5865F2 0%, #764ba2 100%); border: none; font-weight: 600; padding: 12px; transition: all 0.3s; }
-      .btn-run:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(88,101,242,0.4); }
-      .nav-pills .nav-link { border-radius: 8px; margin: 0 5px; font-weight: 500; }
-      .nav-pills .nav-link.active { background: linear-gradient(90deg, #5865F2 0%, #764ba2 100%); }
-      .table-container { background: white; border-radius: 8px; padding: 15px; }
-      .plot-container { background: white; border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-      .metric-card { background: white; border-radius: 8px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-      .metric-value { font-size: 2em; font-weight: 700; color: #5865F2; }
-      .metric-label { color: #6c757d; font-size: 0.9em; margin-top: 5px; }
-      .thin-sep { border: 0; border-top: 1px solid #e5e7eb; margin: 12px 0 16px 0; }
+      body { background-color: #f4f6fb; min-height: 100vh; }
+      .main-container { background-color: #ffffff; border-radius: 12px; padding: 28px; margin: 24px auto; max-width: 1320px; box-shadow: 0 12px 32px rgba(15,23,42,0.08); }
+      .sidebar-card { background-color: #ffffff; border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 4px 18px rgba(15,23,42,0.05); }
+      .sidebar-card .form-group { margin-bottom: 10px; }
+      .sidebar-header { font-weight: 600; color: #1f2937; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
+      .btn-run { background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); border: none; font-weight: 600; padding: 12px; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+      .btn-run:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(37,99,235,0.35); }
+      .nav-pills .nav-link { border-radius: 10px; margin: 0 4px; font-weight: 500; color: #1f2937; }
+      .nav-pills .nav-link.active { background: #2563eb; color: #ffffff; box-shadow: 0 4px 12px rgba(37,99,235,0.35); }
+      .table-container { background: #ffffff; border-radius: 10px; padding: 16px; box-shadow: 0 3px 16px rgba(15,23,42,0.04); }
+      .plot-container { background: #ffffff; border-radius: 10px; padding: 16px; margin-bottom: 24px; box-shadow: 0 3px 16px rgba(15,23,42,0.04); }
+      .metric-card { background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%); border-radius: 12px; padding: 18px; text-align: center; color: #ffffff; box-shadow: 0 6px 20px rgba(37,99,235,0.35); }
+      .metric-value { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
+      .metric-label { font-size: 0.9rem; opacity: 0.9; margin-top: 4px; }
+      .thin-sep { border: 0; border-top: 1px solid #e5e7eb; margin: 16px 0; }
+      .range-label { font-weight: 600; font-size: 1.05rem; color: #1f2937; }
+      .btn.disabled, .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+      .dataTables_wrapper .dataTables_filter input { border-radius: 6px; border: 1px solid #cbd5f5; padding: 6px 8px; }
+      @keyframes spinner-border { to { transform: rotate(360deg); } }
+      .spinner-border { display: inline-block; width: 1.5rem; height: 1.5rem; vertical-align: text-bottom; border: 0.25em solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spinner-border .75s linear infinite; }
     "))
     ,
     # Initialize Bootstrap tooltips
-    tags$script(HTML("document.addEventListener('DOMContentLoaded', function(){var tt=[].slice.call(document.querySelectorAll('[data-bs-toggle=\\"tooltip\\"]')); tt.map(function(el){return new bootstrap.Tooltip(el);});});"))
+    tags$script(HTML('document.addEventListener("DOMContentLoaded", function(){var tt=[].slice.call(document.querySelectorAll("[data-bs-toggle=\"tooltip\"]")); tt.map(function(el){return new bootstrap.Tooltip(el);});});'))
   ),
   
   div(class = "main-container",
-    h1("Clash Economy Simulator", style = "text-align: center; margin-bottom: 30px; color: #5865F2;"),
+    h1("Clash Economy Simulator", style = "text-align: center; margin-bottom: 30px; color: #1f2937;"),
+    # Hidden E2E beacon with JSON status for headless tests
+    div(style = "display:none;", textOutput("e2e_beacon")),
     
     layout_sidebar(
       sidebar = sidebar(
@@ -83,11 +116,12 @@ ui <- page_fluid(
           h4(class = "sidebar-header", "Data & View"),
           selectInput("data_version",
             label = "Data Version",
-            choices = c("Base"), 
+            choices = data_versions(), 
             selected = "Base",
             width = "100%"
           ),
           checkboxInput("use_cache", "Use cached results (if unchanged)", value = TRUE),
+          uiOutput("run_button_ui"),
           uiOutput('cache_status'),
           hr(),
           span("Day Range", style = "font-weight: 500; color: #495057;"),
@@ -97,10 +131,7 @@ ui <- page_fluid(
             value = c(1, 180),
             width = "100%"
           ),
-          checkboxInput("show_smooth",
-            label = "Smooth lines (LOESS)",
-            value = FALSE
-          )
+          
         )
       ),
       
@@ -109,7 +140,7 @@ ui <- page_fluid(
         
         nav_panel("Daily Table",
           br(),
-          textOutput("range_label_table"),
+          textOutput("range_label_table", container = function(...) div(class = "range-label", ...)),
           br(),
           div(class = "table-container",
             DTOutput("tbl_daily")
@@ -123,46 +154,35 @@ ui <- page_fluid(
         
         nav_panel("Visualizations",
           br(),
-          fluidRow(
-            column(12,
-              actionButton("export_pngs", label = tagList(icon("download"), " Save All Charts (PNG)"), class = "btn btn-secondary", width = "100%")
-            )
-          ),
-          br(),
-          textOutput("range_label"),
+          textOutput("range_label", container = function(...) div(class = "range-label", ...)),
           br(),
           fluidRow(
-            column(4,
-              div(class = "metric-card",
-                div(class = "metric-value", textOutput("metric_trophies")),
-                div(class = "metric-label", "Final Trophies")
-              )
-            ),
-            column(4,
-              div(class = "metric-card",
-                div(class = "metric-value", textOutput("metric_gold")),
-                div(class = "metric-label", "Total Gold Earned")
-              )
-            ),
-            column(4,
-              div(class = "metric-card",
-                div(class = "metric-value", textOutput("metric_winrate")),
-                div(class = "metric-label", "Average Win Rate")
-              )
-            )
+            column(4, div(class = "metric-card", div(class = "metric-value", textOutput("metric_trophies")), div(class = "metric-label", "Final Trophies"))),
+            column(4, div(class = "metric-card", div(class = "metric-value", textOutput("metric_gold")), div(class = "metric-label", "Total Gold Earned"))),
+            column(4, div(class = "metric-card", div(class = "metric-value", textOutput("metric_winrate")), div(class = "metric-label", "Average Win Rate")))
           ),
           tags$hr(class = "thin-sep"),
           br(),
-          div(class = "plot-container", plotOutput("plt_trophies")),
-          div(class = "plot-container", plotOutput("plt_gold")),
-          div(class = "plot-container", plotOutput("plt_winrate")),
-          div(class = "plot-container", plotOutput("plt_boxmix")),
-          div(class = "plot-container", plotOutput("plt_spend_rarity")),
-          div(class = "plot-container", plotOutput("plt_power_rarity")),
-          div(class = "plot-container", plotOutput("plt_eff_daily")),
-          div(class = "plot-container", plotOutput("plt_eff_cum")),
-          div(class = "plot-container", plotOutput("plt_pass")),
-          div(class = "plot-container", plotOutput("plt_trophies_drift"))
+          fluidRow(
+            column(6, div(class = "plot-container", plotOutput("plt_trophies"))),
+            column(6, div(class = "plot-container", plotOutput("plt_gold")))
+          ),
+          fluidRow(
+            column(6, div(class = "plot-container", plotOutput("plt_winrate"))),
+            column(6, div(class = "plot-container", plotOutput("plt_boxmix")))
+          ),
+          fluidRow(
+            column(6, div(class = "plot-container", plotOutput("plt_spend_rarity"))),
+            column(6, div(class = "plot-container", plotOutput("plt_power_rarity")))
+          ),
+          fluidRow(
+            column(6, div(class = "plot-container", plotOutput("plt_eff_daily"))),
+            column(6, div(class = "plot-container", plotOutput("plt_eff_cum")))
+          ),
+          fluidRow(
+            column(6, div(class = "plot-container", plotOutput("plt_pass"))),
+            column(6, div(class = "plot-container", plotOutput("plt_trophies_drift")))
+          )
         ),
         
         nav_panel("Compare",
@@ -232,7 +252,7 @@ ui <- page_fluid(
           div(class = "table-container", DTOutput("edit_table_view"))
         ),
         
-        nav_panel("Assumptions",
+        nav_panel("Assumptions Editor",
           br(),
           fluidRow(
             column(6,
@@ -266,58 +286,57 @@ ui <- page_fluid(
           br(),
           actionButton("cfg_reset", label = tagList(icon('undo'), ' Reset to Defaults'), class = 'btn btn-light'),
           br(),
-          accordion(open = if (file.exists('runs/last_config.json')) character(0) else 'Core Settings', multiple = TRUE,
-            accordion_panel(tagList(icon('cog'), ' Core Settings'),
+          accordion(open = if (file.exists('runs/last_config.json')) character(0) else 'core', id = 'assump_accordion', multiple = TRUE,
+            accordion_panel("Core Settings", value = 'core',
               fluidRow(
-            column(4,
+            column(3,
               numericInput("cfg_seed", label = tagList("Seed", help_icon("Used for reproducible randomness.")), value = 42, min = 1),
               tags$small(class = "text-muted", "Random seed for reproducible results.")
             ),
-            column(4,
+            column(3,
               numericInput("cfg_matches", label = tagList("Matches/day", help_icon("Daily match count (fixed). Impacts pacing of progress.")), value = 15, min = 0, step = 1),
               tags$small(class = "text-muted", "Fixed number of matches played per day.")
             ),
-            column(4,
+            column(3,
               numericInput("cfg_base_wr", label = tagList("Base win rate", help_icon("Win chance vs equal opponents before bots/power. Example: 0.10 = 10%.")), value = 0.5, min = 0, max = 1, step = 0.01),
               tags$small(class = "text-muted", "Win chance vs. equal opponents (before bots/power).")
+            ),
+            column(3,
+              numericInput("cfg_vbonus", label = tagList("Vertical bonus", help_icon("Additive win-rate bonus from progression/power. Example: 0.05 = +5%.")), value = 0.0, min = -1, max = 1, step = 0.01),
+              tags$small(class = "text-muted", "Additive win-rate bonus from progression/power.")
             )
           ),
           fluidRow(
-            column(4,
-              numericInput("cfg_vbonus", label = tagList("Vertical bonus", help_icon("Additive win-rate bonus from progression/power. Example: 0.05 = +5%.")), value = 0.0, min = -1, max = 1, step = 0.01),
-              tags$small(class = "text-muted", "Additive win-rate bonus from progression/power.")
-            ),
-            column(4,
+            column(3,
               numericInput("cfg_bot_rate", label = tagList("Bot rate", help_icon("Share of matches vs bots. Example: 0.10 = 10%.")), value = 0.1, min = 0, max = 1, step = 0.01),
               tags$small(class = "text-muted", "Share of matches vs. bots.")
             ),
-            column(4,
+            column(3,
               numericInput("cfg_bot_wr", label = tagList("Bot win rate", help_icon("Your win chance against a bot. Example: 0.90 = 90%.")), value = 0.9, min = 0, max = 1, step = 0.01),
               tags$small(class = "text-muted", "Your win chance against a bot.")
+            ),
+            column(3,
+              numericInput("cfg_trophy_win", label = tagList("Trophies on win", help_icon("Trophies gained on a win. Typical values ~30.")), value = 30, min = 0),
+              tags$small(class = "text-muted", "Trophies gained on a win.")
             )
           ),
           fluidRow(
-            column(4,
-              numericInput("cfg_trophy_win", label = tagList("Trophies on win", help_icon("Trophies gained on a win. Typical values ~30.")), value = 30, min = 0),
-              tags$small(class = "text-muted", "Trophies gained on a win.")
-            ),
-            column(4,
+            column(3,
               numericInput("cfg_trophy_loss", label = tagList("Trophies on loss", help_icon("Trophies lost on a defeat. Typical values around −29.")), value = -29, max = 0),
               tags$small(class = "text-muted", "Trophies lost on a defeat.")
             ),
-            column(4,
+            column(3,
               numericInput("cfg_gold_min", label = tagList("Gold min (per win)", help_icon("Lower bound for random gold per win. Displayed with thousands separators (e.g., 12,500).")), value = 10, min = 0),
               tags$small(class = "text-muted", "Lower bound for random gold per win.")
-            )
-          ),
-          fluidRow(
-            column(4,
+            ),
+            column(3,
               numericInput("cfg_gold_max", label = tagList("Gold max (per win)", help_icon("Upper bound for random gold per win. Displayed with thousands separators (e.g., 25,000).")), value = 10, min = 0),
               tags$small(class = "text-muted", "Upper bound for random gold per win.")
             )
-          )
+          ),
+          br()
         ),
-        accordion_panel(tagList(icon('award'), ' Pass Settings'),
+        accordion_panel('Pass Settings', value = 'pass',
           fluidRow(
             column(6,
               numericInput("cfg_pass_crowns", label = tagList("Crowns per level", help_icon("Crowns required to advance one Pass level.")), value = 20, min = 1)
@@ -327,7 +346,7 @@ ui <- page_fluid(
             )
           )
         ),
-        accordion_panel(tagList(icon('chess'), ' Crown Distribution'),
+        accordion_panel('Crown Distribution', value = 'crowns',
           fluidRow(
             column(6,
               h5(tagList("On Win", help_icon("Probability of getting 0–3 crowns when you win. Sums to 100%.")), style = "color: #57F287;"),
@@ -360,8 +379,17 @@ server <- function(input, output, session) {
   vals <- reactiveValues(
     daily_base = NULL,
     cmp_results = list(),
-    meta = list(status = "", time = NA_character_)
+    meta = list(status = "", time = NA_character_),
+    edit_data = NULL,
+    is_computing = FALSE,
+    cancel_requested = FALSE
   )
+  
+  # Apply selected data version by setting lookup directory used by lucky_star tables
+  observe({
+    ver <- input$data_version %||% "Base"
+    options(cr_econ_tables_dir = normalizePath(data_version_path(ver), mustWork = FALSE))
+  })
   
   # Load last run config if present
   observe({
@@ -453,16 +481,12 @@ server <- function(input, output, session) {
     json <- jsonlite::toJSON(build_cfg(), auto_unbox = TRUE)
     digest::digest(list(json, input$cfg_seed %||% 42, input$data_version %||% 'Base'))
   })
-  # Fallback loader from included JSON daily if needed
-  load_default_daily <- function(){
-    cand <- c(
-      'runs/522a576248c3/1/daily.json',
-      'runs/1620f947eb91/1/daily.json'
-    )
-    path <- cand[file.exists(cand)][1]
-    if (!is.na(path) && nzchar(path)) {
+  # Bundled sample loader for fast initial render
+  load_bundled_sample_daily <- function(){
+    path <- file.path('runs','examples','sample_daily.json')
+    if (file.exists(path)) {
       df <- jsonlite::fromJSON(path, simplifyVector = TRUE)
-      as_tibble(df)
+      tibble::as_tibble(df)
     } else NULL
   }
   load_cached <- function(key){
@@ -474,38 +498,91 @@ server <- function(input, output, session) {
     saveRDS(obj, p)
   }
 
-  # Reactive simulation with optional caching
-  observe({
+  # Explicit run control: compute on button click (or on first load)
+  run_simulation <- function() {
+    vals$is_computing <- TRUE
+    vals$cancel_requested <- FALSE
     cfg <- build_cfg(); sd <- input$cfg_seed %||% 42
     key <- cache_key()
     res <- if (isTRUE(input$use_cache)) load_cached(key) else NULL
     if (!is.null(res)) {
       vals$meta <- list(status = "Loaded from cache", time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+      vals$is_computing <- FALSE
     } else {
-      # try to compute; on error, use default JSON and still cache
       res <- tryCatch({
         withProgress(message = 'Simulating season...', value = 0, {
-          # simple single-step progress
-          incProgress(0.3)
-          out <- simulate_season(cfg, seed = sd)
-          incProgress(0.7)
+          out <- simulate_season(cfg, seed = sd,
+            progress = function(i, n){
+              setProgress(value = i/n, detail = paste0('Day ', i, ' of ', n))
+            },
+            should_cancel = function(){ isTRUE(shiny::isolate(vals$cancel_requested)) }
+          )
           out
         })
-      }, error = function(e) NULL)
-      if (is.null(res)) {
-        df <- load_default_daily()
-        if (!is.null(df)) {
-          res <- list(daily = df, state = list())
-        }
-      }
+      }, error = function(e) { 
+        vals$is_computing <- FALSE
+        showNotification(paste('Simulation failed:', conditionMessage(e)), type='error')
+        NULL 
+      })
       if (!is.null(res)) {
         save_cached(key, res)
         write_json(list(cfg = cfg, seed = sd), file.path('runs','last_config.json'), auto_unbox = TRUE, pretty = TRUE)
-        vals$meta <- list(status = if (isTRUE(input$use_cache)) "Computed and cached" else "Computed", time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+        # If canceled, daily may be shorter than cfg$days
+        ddays <- try(nrow(res$daily), silent = TRUE)
+        if (!inherits(ddays, 'try-error') && is.finite(ddays) && ddays < cfg$days) {
+          vals$meta <- list(status = sprintf("Canceled at day %d/%d", ddays, cfg$days), time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+        } else {
+          vals$meta <- list(status = if (isTRUE(input$use_cache)) "Computed and cached" else "Computed", time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+        }
+      }
+      vals$is_computing <- FALSE
+      vals$cancel_requested <- FALSE
+    }
+    if (!is.null(res)) vals$daily_base <- res$daily %>% mutate(data_version = input$data_version)
+  }
+
+  # Initial load: use cache if available, otherwise bundled sample (no compute)
+  observe({
+    if (!is.null(vals$daily_base)) return()
+    key <- cache_key()
+    res <- if (isTRUE(input$use_cache)) load_cached(key) else NULL
+    if (!is.null(res)) {
+      vals$daily_base <- res$daily %>% mutate(data_version = input$data_version)
+      vals$meta <- list(status = "Loaded from cache", time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+    } else {
+      smp <- load_bundled_sample_daily()
+      if (!is.null(smp)) {
+        vals$daily_base <- smp %>% mutate(data_version = input$data_version)
+        vals$meta <- list(status = "Loaded default sample", time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
       }
     }
-    req(res)
-    vals$daily_base <- res$daily %>% mutate(data_version = input$data_version)
+  })
+
+  # Dynamic run/cancel button
+  output$run_button_ui <- renderUI({
+    if (isTRUE(vals$is_computing)) {
+      actionButton("cancel_sim", 
+        label = tagList(icon('stop'), ' Cancel'), 
+        class = 'btn btn-danger', 
+        width = '100%'
+      )
+    } else {
+      actionButton("run_sim", 
+        label = tagList(icon('play'), ' Run Simulation'), 
+        class = 'btn btn-primary btn-run', 
+        width = '100%'
+      )
+    }
+  })
+  
+  # Run button: recompute with current settings
+  observeEvent(input$run_sim, {
+    if (!isTRUE(vals$is_computing)) {
+      run_simulation()
+    }
+  })
+  observeEvent(input$cancel_sim, {
+    vals$cancel_requested <- TRUE
   })
 
   # Cache/compute status in sidebar
@@ -562,7 +639,8 @@ server <- function(input, output, session) {
       options = list(
         pageLength = 10,
         scrollX = TRUE,
-        dom = 'Bfrtip'
+        dom = 'frtip',
+        searchHighlight = TRUE
       ),
       rownames = FALSE,
       class = 'table-striped table-hover'
@@ -573,10 +651,27 @@ server <- function(input, output, session) {
   
   # Range label above visuals
   output$range_label <- renderText({
-    paste0("Current range: Days ", input$day_range[1], "–", input$day_range[2])
+    req(vals$daily_base)
+    total <- nrow(vals$daily_base)
+    start <- format(input$day_range[1], big.mark = ",")
+    end <- format(input$day_range[2], big.mark = ",")
+    total_fmt <- format(total, big.mark = ",")
+    paste0("Days ", start, " – ", end, " of ", total_fmt)
   })
   output$range_label_table <- renderText({
-    paste0("Current range: Days ", input$day_range[1], "–", input$day_range[2])
+    req(vals$daily_base)
+    total <- nrow(vals$daily_base)
+    start <- format(input$day_range[1], big.mark = ",")
+    end <- format(input$day_range[2], big.mark = ",")
+    total_fmt <- format(total, big.mark = ",")
+    paste0("Days ", start, " – ", end, " of ", total_fmt)
+  })
+
+  # Keep day range slider in sync with available results
+  observe({
+    req(vals$daily_base)
+    total <- nrow(vals$daily_base)
+    updateSliderInput(session, "day_range", min = 1, max = total, value = c(1, min(total, input$day_range[2] %||% total)))
   })
   
   # Upgrade summary
@@ -587,23 +682,36 @@ server <- function(input, output, session) {
     
     if (nrow(df) > 0 && "gold_spent_upgrades" %in% names(df) && 
         "upgrades_applied" %in% names(df)) {
+      total_spend <- sum(df$gold_spent_upgrades, na.rm = TRUE)
+      total_upgrades <- sum(df$upgrades_applied, na.rm = TRUE)
+      total_power <- sum(df$power_gained, na.rm = TRUE)
+      days <- nrow(df)
+      bank <- {
+        income <- df$gold_from_matches + df$gold_from_pass
+        spend <- df$gold_spent_upgrades
+        sum(income - spend, na.rm = TRUE)
+      }
+      avg_gold_per_upgrade <- ifelse(total_upgrades > 0, round(total_spend / total_upgrades, 1), 0)
+      power_per_1k_gold <- ifelse(total_spend > 0, round(total_power / (total_spend/1000), 2), NA)
+      power_per_upgrade <- ifelse(total_upgrades > 0, round(total_power / total_upgrades, 2), NA)
+      upgrades_per_day <- round(total_upgrades / days, 2)
+      spend_per_day <- round(total_spend / days, 1)
+
       summary <- data.frame(
-        Metric = c("Total Gold Spent", "Total Upgrades", "Avg Gold per Upgrade"),
-        Value = c(
-          sum(df$gold_spent_upgrades, na.rm = TRUE),
-          sum(df$upgrades_applied, na.rm = TRUE),
-          ifelse(sum(df$upgrades_applied, na.rm = TRUE) > 0,
-                 round(sum(df$gold_spent_upgrades, na.rm = TRUE) / 
-                       sum(df$upgrades_applied, na.rm = TRUE), 1),
-                 0)
-        )
+        Metric = c(
+          "Total Gold Spent", "Total Upgrades", "Avg Gold per Upgrade",
+          "Total Power Gained", "Power per Upgrade", "Power per 1k Gold",
+          "Upgrades per Day", "Spend per Day", "Net Bank Change"
+        ),
+        Value = c(total_spend, total_upgrades, avg_gold_per_upgrade, total_power, power_per_upgrade, power_per_1k_gold, upgrades_per_day, spend_per_day, bank),
+        check.names = FALSE
       )
-    datatable(summary, 
-      options = list(dom = 't', pageLength = 10),
-      rownames = FALSE,
-      class = 'table-striped'
-    ) %>%
-        formatCurrency(columns = "Value", currency = "", interval = 3, mark = ",", digits = 0)
+      datatable(summary, 
+        options = list(dom = 't', pageLength = 10),
+        rownames = FALSE,
+        class = 'table-striped'
+      ) %>%
+        formatCurrency(columns = c("Value"), currency = "", interval = 3, mark = ",", digits = 0)
     }
   })
   
@@ -611,9 +719,7 @@ server <- function(input, output, session) {
   output$plt_trophies <- renderPlot({
     req(vals$daily_base)
     df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    p <- plot_trophies(df)
-    if (isTRUE(input$show_smooth)) p <- p + geom_smooth(se = FALSE, method = 'loess', span = 0.3, color = '#94a3b8')
-    p
+    plot_trophies(df)
   })
   
   output$plt_gold <- renderPlot({
@@ -676,28 +782,29 @@ server <- function(input, output, session) {
     plot_trophies_drift(df)
   })
 
-  # Export all current charts to PNG files under runs/screenshots
-  observeEvent(input$export_pngs, {
-    req(vals$daily_base)
-    out_dir <- normalizePath(file.path('runs','screenshots'), mustWork = FALSE)
-    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-    df <- vals$daily_base %>% filter(day >= input$day_range[1] & day <= input$day_range[2])
-    save_plot <- function(plot_obj, filename, width=10, height=6, dpi=144){
-      if (is.null(plot_obj)) return(invisible(NULL))
-      try(ggplot2::ggsave(filename = file.path(out_dir, filename), plot = plot_obj, width = width, height = height, dpi = dpi), silent = TRUE)
-    }
-    save_plot(plot_trophies(df), 'trophies.png')
-    save_plot(plot_gold_flow(df), 'gold_flow.png')
-    save_plot(plot_winrate(df), 'winrate.png')
-    save_plot(plot_box_rarity_mix(df), 'box_rarity_mix.png')
-    save_plot(plot_spend_by_rarity_range(df), 'spend_by_rarity.png')
-    save_plot(plot_power_by_rarity_range(df), 'power_by_rarity.png')
-    save_plot(plot_upgrade_efficiency_daily(df), 'upgrade_efficiency_daily.png')
-    save_plot(plot_upgrade_efficiency_cum(df), 'upgrade_efficiency_cum.png')
-    save_plot(plot_pass_progress(df), 'pass_progress.png')
-    save_plot(plot_trophies_drift(df), 'trophies_drift.png')
-    showNotification(sprintf('Saved charts to %s', out_dir), type = 'message')
+  # E2E beacon: publish minimal health/status JSON for automation
+  output$e2e_beacon <- renderText({
+    dd <- vals$daily_base
+    has_daily <- !is.null(dd)
+    rows <- if (!is.null(dd)) nrow(dd) else 0L
+    mt <- tryCatch({
+      if (!is.null(dd)) list(
+        trophies = as.numeric(tail(dd$trophies_end, 1)),
+        gold = suppressWarnings(as.numeric(sum(dd$gold_total))),
+        winrate = suppressWarnings(as.numeric(mean(dd$winrate)))
+      ) else NULL
+    }, error = function(e) NULL)
+    cr <- !is.null(vals$cmp_results) && length(vals$cmp_results) > 0
+    jsonlite::toJSON(list(
+      has_daily = isTRUE(has_daily),
+      daily_rows = rows,
+      metrics = mt,
+      cmp_ready = isTRUE(cr),
+      t = as.numeric(Sys.time())
+    ), auto_unbox = TRUE)
   })
+
+  # Export button removed (use R/snapshot.R for batch exports)
   
   # (Research tab removed)
   
@@ -777,18 +884,68 @@ server <- function(input, output, session) {
   })
   
   # Data Editor
-  output$edit_table_view <- renderDT({
+  # Load table for editing when selection changes
+  observeEvent(input$edit_table, {
     req(input$edit_table)
-    tables_dir()
     path <- file.path(tables_dir(), input$edit_table)
-    
     if (file.exists(path)) {
-      df <- read_csv(path, show_col_types = FALSE)
-      datatable(df, 
-        editable = TRUE, 
-        options = list(pageLength = 15),
-        class = 'table-striped'
-      )
+      vals$edit_data <- readr::read_csv(path, show_col_types = FALSE)
+    } else {
+      vals$edit_data <- NULL
+    }
+  }, ignoreInit = TRUE)
+
+  # Render editable table from reactive state
+  output$edit_table_view <- renderDT({
+    req(vals$edit_data)
+    datatable(vals$edit_data,
+      editable = TRUE,
+      options = list(pageLength = 15, scrollX = TRUE),
+      class = 'table-striped'
+    )
+  })
+
+  # Track in-place edits from DT and keep them in vals$edit_data
+  proxy_edit <- DT::dataTableProxy("edit_table_view")
+  observeEvent(input$edit_table_view_cell_edit, {
+    info <- input$edit_table_view_cell_edit
+    req(!is.null(vals$edit_data))
+    i <- info$row; j <- info$col; v <- info$value
+    dat <- vals$edit_data
+    # Coerce to original column type when reasonable
+    tgt <- dat[[j]]
+    if (is.numeric(tgt)) {
+      nv <- suppressWarnings(as.numeric(v))
+      dat[i, j] <- ifelse(is.na(nv), v, nv)
+    } else if (inherits(tgt, "integer")) {
+      nv <- suppressWarnings(as.integer(v))
+      dat[i, j] <- ifelse(is.na(nv), v, nv)
+    } else {
+      dat[i, j] <- v
+    }
+    vals$edit_data <- dat
+    DT::replaceData(proxy_edit, dat, resetPaging = FALSE, rownames = FALSE)
+  })
+
+  # Save current edited table into a versioned directory
+  observeEvent(input$edit_save, {
+    req(input$edit_table, vals$edit_data)
+    ver <- trimws(input$edit_version %||% "")
+    if (!nzchar(ver)) {
+      showNotification("Please enter a version name to save.", type = "error")
+      return(invisible(NULL))
+    }
+    ensure_version_dirs(ver)
+    out_dir <- normalizePath(data_version_path(ver), mustWork = FALSE)
+    out_path <- file.path(out_dir, input$edit_table)
+    ok <- try({ readr::write_csv(vals$edit_data, out_path) ; TRUE }, silent = TRUE)
+    if (identical(ok, TRUE)) {
+      # Refresh version choices and switch to the new version
+      updateSelectInput(session, "data_version", choices = data_versions(), selected = ver)
+      options(cr_econ_tables_dir = out_dir)
+      showNotification(sprintf("Saved table to %s", out_path), type = "message")
+    } else {
+      showNotification("Failed to save table. Check filesystem permissions.", type = "error")
     }
   })
   

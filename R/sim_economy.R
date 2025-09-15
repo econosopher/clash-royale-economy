@@ -5,8 +5,8 @@ library(purrr)
 source("R/sim_config.R")
 source("R/lucky_star.R")
 
-simulate_match <- function(state, cfg) {
-  intrinsic <- effective_winrate(cfg)
+simulate_match <- function(state, cfg, power_bonus = 0) {
+  intrinsic <- effective_winrate(cfg, power_bonus)
   win_prob <- mm_adjust_winrate(cfg, intrinsic, state$trophies)
   win <- runif(1) < win_prob
   crowns <- sample_from_pmf(if (win) cfg$crown_dist$on_win else cfg$crown_dist$on_loss)
@@ -34,43 +34,61 @@ apply_card_drop <- function(state, drop) {
   state
 }
 
-`%||%` <- function(a,b) if (is.null(a)) b else a
 
-# Greedy upgrades with deterministic tie-breaking
+
+# Greedy upgrades with deterministic tie-breaking.
+# This function iterates through all possible card upgrades and applies the one
+# with the highest "value" (power gain per gold spent). This process is repeated
+# until no more upgrades can be afforded.
 greedy_apply_upgrades <- function(state, cfg) {
   rules <- cfg$progression$by_rarity
   gold_spent <- 0L; upgrades <- 0L; power_gained <- 0.0
+  
+  # Safety break to prevent infinite loops in case of unexpected behavior.
+  MAX_UPGRADE_ITERATIONS <- 10000L
   safety <- 0L
+  
   steps <- tibble::tibble(rarity=character(), gold_spent=double(), power_gained=double())
   repeat {
     safety <- safety + 1L
-    if (safety > 10000L) break
-    # Collect candidates (tidyverse-friendly; small lists keep overhead low)
+    if (safety > MAX_UPGRADE_ITERATIONS) {
+      warning("Exceeded max upgrade iterations. Breaking.")
+      break
+    }
+    
+    # Collect all possible upgrades that can be afforded.
     candidates <- purrr::imap_dfr(state$cards, function(c, nm){
       rkey <- tolower(c$rarity)
       rr <- rules[[rkey]]
       if (is.null(rr)) return(NULL)
+      
       lvl <- c$level
       max_level <- length(rr$gold_cost_per_level) + 1L
       if (lvl >= max_level) return(NULL)
+      
       idx <- lvl
       copies_needed <- rr$copies_per_level[[idx]] %||% NA
       gold_cost <- rr$gold_cost_per_level[[idx]] %||% NA
       if (is.na(copies_needed) || is.na(gold_cost)) return(NULL)
+      
       if (c$copies < copies_needed || state$gold_bank < gold_cost) return(NULL)
+      
       value <- rr$power_per_level_step
       ratio <- value / max(1, gold_cost)
       tibble::tibble(name = nm, rarity = c$rarity, copies_needed = copies_needed,
                      gold_cost = gold_cost, value = value, ratio = ratio,
                      rarity_rank = rarity_rank(c$rarity))
     })
+    
     if (nrow(candidates) == 0) break
-    # Deterministic sort: value/gold desc, rarity rank asc, card id asc
+    
+    # Apply the best upgrade based on value/gold ratio, then rarity, then name.
     best <- candidates %>%
       dplyr::mutate(ratio = round(ratio, 8)) %>%
       dplyr::arrange(dplyr::desc(ratio), rarity_rank, name) %>%
       dplyr::slice(1)
-    # apply
+    
+    # Update state after applying the upgrade.
     card <- state$cards[[best$name]]
     card$copies <- card$copies - best$copies_needed
     card$level <- card$level + 1L
@@ -100,9 +118,16 @@ simulate_day <- function(state, cfg, day_index) {
   lucky <- if (cfg$lucky_drop$enabled) list(star=load_star_upgrade(), final=load_final_reward()) else NULL
   gold_by_rarity <- c(common=0.0, rare=0.0, epic=0.0, legendary=0.0)
   power_by_rarity <- c(common=0.0, rare=0.0, epic=0.0, legendary=0.0)
+  daily_box_cap <- cfg$caps$daily_mystery_boxes
+  if (is.null(daily_box_cap) || !is.finite(daily_box_cap)) {
+    daily_box_cap <- Inf
+  } else {
+    daily_box_cap <- max(0L, as.integer(daily_box_cap))
+  }
 
   for (m in seq_len(matches)) {
-    res <- simulate_match(state, cfg)
+    power_bonus <- power_bonus_from_score(cfg, state$power_score %||% 0.0)
+    res <- simulate_match(state, cfg, power_bonus)
     win <- res$win
     crowns <- as.integer(res$crowns)
     gold <- as.integer(res$gold)
@@ -112,11 +137,12 @@ simulate_day <- function(state, cfg, day_index) {
 
     if (win) {
       next_win_index <- wins + 1L
-      if (!is.null(lucky) && next_win_index <= cfg$lucky_drop$wins_with_lucky_drops) {
+      if (!is.null(lucky) && boxes_earned_today < daily_box_cap &&
+          next_win_index <= cfg$lucky_drop$wins_with_lucky_drops) {
         # roll star
         start <- if (next_win_index == 1L) 2L else 1L
-        final_star <- lucky_star_roll_star(start, cfg$lucky_drop$spins, load_star_upgrade())
-        label <- lucky_star_roll_final(final_star, load_final_reward())
+        final_star <- lucky_star_roll_star(start, cfg$lucky_drop$spins, lucky$star)
+        label <- lucky_star_roll_final(final_star, lucky$final)
         boxes_earned_today <- boxes_earned_today + 1L
         if (label == "Random Cards") {
           # mimic a simple rarity draw
@@ -219,7 +245,7 @@ simulate_day <- function(state, cfg, day_index) {
   list(summary = out, state = state)
 }
 
-simulate_season <- function(cfg, seed = 42) {
+simulate_season <- function(cfg, seed = 42, progress = NULL, should_cancel = NULL) {
   set.seed(seed)
   state <- list(
     day = 0L, trophies = 0L, pass_crowns = 0L, pass_levels = 0L, gold_bank = 0L,
@@ -228,6 +254,14 @@ simulate_season <- function(cfg, seed = 42) {
   )
   daily <- vector("list", cfg$days)
   for (d in seq_len(cfg$days)) {
+    if (is.function(progress)) {
+      # report absolute progress [0..1] with day context
+      try(progress(d, cfg$days), silent = TRUE)
+    }
+    if (is.function(should_cancel)) {
+      sc <- try(should_cancel(), silent = TRUE)
+      if (!inherits(sc, 'try-error') && isTRUE(sc)) break
+    }
     state$gold_today <- 0L
     res <- simulate_day(state, cfg, d)
     state <- res$state
@@ -237,6 +271,8 @@ simulate_season <- function(cfg, seed = 42) {
   box_vectors <- function(x) {
     if (is.atomic(x) && length(x) != 1) list(x) else x
   }
+  # Filter out any NULL days (e.g., on cancellation)
+  daily <- Filter(Negate(is.null), daily)
   daily_df <- dplyr::bind_rows(lapply(daily, function(row){
     # ensure any vector-valued fields become list-cols, then coerce to 1-row tibble
     row2 <- lapply(row, box_vectors)

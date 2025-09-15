@@ -1,3 +1,5 @@
+source("R/utils.R")
+
 default_config <- function(days = 30, matches_per_day = 15) {
   list(
     days = as.integer(days),
@@ -7,6 +9,7 @@ default_config <- function(days = 30, matches_per_day = 15) {
     bot_rate = 0.10,
     bot_winrate = 0.90,
     vertical_winrate_bonus = 0.00,
+    mm_convergence_per_arena = 0.15,
     trophies_on_win = 30L,
     trophies_on_loss = -29L,
     gold_drop = list(fixed_amount = NA_integer_, min_amount = 10L, max_amount = 10L),
@@ -21,16 +24,23 @@ default_config <- function(days = 30, matches_per_day = 15) {
   )
 }
 
-effective_winrate <- function(cfg) {
+effective_winrate <- function(cfg, dynamic_bonus = 0) {
   base <- cfg$base_winrate
   blended <- (1.0 - cfg$bot_rate) * base + cfg$bot_rate * cfg$bot_winrate
-  pmin(1.0, pmax(0.0, blended + cfg$vertical_winrate_bonus))
+  vertical <- cfg$vertical_winrate_bonus %||% 0
+  bonus <- dynamic_bonus %||% 0
+  pmin(1.0, pmax(0.0, blended + vertical + bonus))
 }
 
+# Adjusts the winrate based on the matchmaking system.
+# This function models the convergence of winrate towards 50% as a player
+# climbs through arenas. The `factor` calculation uses an exponential decay
+# to model this convergence.
 mm_adjust_winrate <- function(cfg, intrinsic, trophies) {
   target <- (1.0 - cfg$bot_rate) * 0.5 + cfg$bot_rate * cfg$bot_winrate
   arena_index <- max(0L, floor(trophies / 400))
-  factor <- exp(-0.15 * arena_index)
+  conv <- cfg$mm_convergence_per_arena %||% 0.15
+  factor <- exp(-conv * arena_index)
   pmin(1.0, pmax(0.0, target + (intrinsic - target) * factor))
 }
 

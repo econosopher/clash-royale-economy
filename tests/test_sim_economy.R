@@ -41,3 +41,41 @@ d1 <- dres$summary
 must_have <- c("matches","wins","losses","crowns","gold_from_matches","gold_from_pass",
                "trophies_end","arena_end","gold_spent_upgrades","upgrades_applied","power_total")
 stopifnot(all(must_have %in% names(d1)))
+
+message('stage: power bonus influences win probability')
+cfg_bonus <- default_config(days = 1, matches_per_day = 1)
+cfg_bonus$base_winrate <- 0
+cfg_bonus$bot_rate <- 0
+cfg_bonus$bot_winrate <- 0
+cfg_bonus$vertical_winrate_bonus <- 0
+cfg_bonus$power_to_winrate$max_bonus <- 1
+state_zero <- list(trophies = 0L)
+res_zero <- simulate_match(state_zero, cfg_bonus, power_bonus = 0)
+stopifnot(identical(res_zero$win, FALSE))
+
+state_full <- list(trophies = 0L)
+res_full <- simulate_match(state_full, cfg_bonus, power_bonus = 1)
+stopifnot(identical(res_full$win, TRUE))
+
+message('stage: daily mystery box cap enforced')
+cfg_cap <- default_config(days = 1, matches_per_day = 10)
+cfg_cap$caps$daily_mystery_boxes <- 2L
+cfg_cap$lucky_drop$wins_with_lucky_drops <- 10L
+cfg_cap$lucky_drop$spins <- 0L
+cfg_cap$base_winrate <- 1
+cfg_cap$bot_rate <- 0
+cfg_cap$bot_winrate <- 0
+cfg_cap$power_to_winrate$max_bonus <- 1
+state_cap <- list(
+  trophies = 0L,
+  pass_crowns = 0L,
+  pass_levels = 0L,
+  gold_bank = 0L,
+  inventory_by_rarity = list(),
+  inventory_by_card = list(),
+  cards = list(),
+  gold_today = 0L,
+  power_score = 0.0
+)
+cap_day <- simulate_day(state_cap, cfg_cap, day_index = 1)
+stopifnot(identical(cap_day$summary$boxes_earned, cfg_cap$caps$daily_mystery_boxes))

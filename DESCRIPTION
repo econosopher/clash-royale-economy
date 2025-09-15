@@ -1,0 +1,37 @@
+Package: ClashRoyaleEconomy
+Title: Clash Royale-style Economy Simulator
+Version: 2.0.0
+Authors@R: 
+    person("Your", "Name", , "your.email@example.com", role = c("aut", "cre"))
+Description: A comprehensive simulation framework for mobile game economies
+    inspired by Clash Royale. Features include match simulation, card
+    progression systems, trophy-based matchmaking, and economic modeling.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Imports:
+    shiny (>= 1.7.0),
+    bslib (>= 0.4.0),
+    ggplot2 (>= 3.4.0),
+    dplyr (>= 1.1.0),
+    tidyr (>= 1.3.0),
+    purrr (>= 1.0.0),
+    readr (>= 2.1.0),
+    DT (>= 0.27),
+    stringr (>= 1.5.0),
+    jsonlite (>= 1.8.0),
+    digest (>= 0.6.0),
+    R6 (>= 2.5.0),
+    cachem (>= 1.0.0),
+    httpuv (>= 1.6.0),
+    later (>= 1.3.0),
+    rlang (>= 1.1.0),
+    checkmate (>= 2.1.0)
+Suggests:
+    chromote,
+    processx,
+    testthat (>= 3.0.0),
+    roxygen2
+Config/testthat/edition: 3

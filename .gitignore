@@ -12,7 +12,14 @@ shiny_bookmarks/
 runs/cache/
 runs/last_config.json
 runs/shiny.log
+runs/screenshots/
+runs/logs/
 *.log
+
+# Broaden runs artifacts but keep examples
+runs/*
+!runs/examples/
+!runs/examples/**
 
 # OS files
 .DS_Store
